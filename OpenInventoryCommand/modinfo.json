@@ -7,7 +7,7 @@
         "MKMoose"
     ],
     "side": "Client",
-    "description": "Adds client-side commands to open and close inventory. Primarily useful to allow opening the survival inventory in creative mode.",
+    "description": "Adds client-side commands to toggle inventory. Allows opening the survival inventory in creative.",
     "version": "1.0.0",
     "dependencies": {
         
