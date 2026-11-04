@@ -1,0 +1,14 @@
+{
+    "$schema": "https://moddbcdn.vintagestory.at/schema/modinfo.latest.json",
+    "type": "Code",
+    "modid": "openinventorycommand",
+    "name": "OpenInventoryCommand",
+    "authors": [
+        "MKMoose"
+    ],
+    "description": "Adds client-side commands to open and close inventory. Primarily useful to allow opening the survival inventory in creative mode.",
+    "version": "1.0.0",
+    "dependencies": {
+        
+    }
+}
