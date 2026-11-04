@@ -62,79 +62,109 @@ public class OpenInventoryCommandModSystem : ModSystem
 
     private TextCommandResult OnInventoryMain(TextCommandCallingArgs args)
     {
-        if (capi.World.Player.WorldData.CurrentGameMode != EnumGameMode.Creative) return OnInventoryCreative(args);
-        else return OnInventorySurvival(args);
+        return OnInventoryInternal(args, InventoryType.Main);
     }
 
     private TextCommandResult OnInventorySurvival(TextCommandCallingArgs args)
     {
-        GuiDialog inventory = capi.Gui.LoadedGuis.First(gui => gui is GuiDialogInventory);
-        if (inventory.IsOpened())
-        {
-            inventory.TryClose();
-
-            SetMainInventory(inventory, InventoryType.Main);
-        }
-        else
-        {
-            inventory.TryOpen();
-            MethodInfo? composeSurvivalInvDialogInfo =
-                typeof(GuiDialogInventory)
-                    .GetMethod("ComposeSurvivalInvDialog",
-                        BindingFlags.NonPublic | BindingFlags.Instance);
-            composeSurvivalInvDialogInfo?.Invoke(inventory, null);
-
-            SetMainInventory(inventory, InventoryType.Survival);
-        }
-
-        return TextCommandResult.Success();
+        return OnInventoryInternal(args, InventoryType.Survival);
     }
 
     private TextCommandResult OnInventoryCreative(TextCommandCallingArgs args)
     {
-        if (capi.World.Player.WorldData.CurrentGameMode != EnumGameMode.Creative) return TextCommandResult.Error("You can only use this command in creative mode.");
+        return OnInventoryInternal(args, InventoryType.Creative);
+    }
+
+    private TextCommandResult OnInventoryInternal(TextCommandCallingArgs args, InventoryType newType)
+    {
+        if (newType == InventoryType.Creative && capi.World.Player.WorldData.CurrentGameMode != EnumGameMode.Creative)
+            return TextCommandResult.Error("You can only use this command in creative mode.");
 
         GuiDialog inventory = capi.Gui.LoadedGuis.First(gui => gui is GuiDialogInventory);
         if (inventory.IsOpened())
         {
             inventory.TryClose();
 
-            SetMainInventory(inventory, InventoryType.Main);
+            if (MatchesCurrentInventoryType(inventory, newType))
+            {
+                // if the new inventory is the same as the currently open one, just close it without opening again
+                SetMainInventory(inventory, InventoryType.Main);
+                return TextCommandResult.Success();
+            }
         }
-        else
-        {
-            inventory.TryOpen();
-            MethodInfo? composeCreativeInvDialogInfo =
-                typeof(GuiDialogInventory)
-                    .GetMethod("ComposeCreativeInvDialog",
-                        BindingFlags.NonPublic | BindingFlags.Instance);
-            composeCreativeInvDialogInfo?.Invoke(inventory, null);
 
-            SetMainInventory(inventory, InventoryType.Creative);
-        }
+        string composeMethodName = GetComposeMethodName(newType);
+
+        inventory.TryOpen();
+        
+        MethodInfo? composeInvDialogInfo =
+            typeof(GuiDialogInventory)
+                .GetMethod(composeMethodName,
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+        composeInvDialogInfo?.Invoke(inventory, null);
+
+        SetMainInventory(inventory, newType);
 
         return TextCommandResult.Success();
     }
 
-    private void SetMainInventory(GuiDialog inventory, InventoryType type)
+    private void SetMainInventory(GuiDialog inventory, InventoryType newType)
+    {
+        string invDialogName = GetInvDialogName(newType);
+
+        if (typeof(GuiDialogInventory)
+            .GetField(invDialogName,
+                BindingFlags.NonPublic | BindingFlags.Instance)?
+            .GetValue(inventory)
+            is not GuiComposer newComposer)
+            return;
+
+        inventory.Composers["maininventory"] = newComposer;
+    }
+
+    private bool MatchesCurrentInventoryType(GuiDialog inventory, InventoryType newType)
+    {
+        string invDialogName = GetInvDialogName(newType);
+
+        if (typeof(GuiDialogInventory)
+            .GetField(invDialogName,
+                BindingFlags.NonPublic | BindingFlags.Instance)?
+            .GetValue(inventory)
+            is not GuiComposer newComposer)
+            return false;
+
+        GuiComposer prevComposer = inventory.Composers["maininventory"];
+        inventory.Composers["maininventory"] = newComposer;
+        return newComposer == prevComposer;
+    }
+
+    private string GetComposeMethodName(InventoryType type)
     {
         if (type == InventoryType.Main)
         {
             type = capi.World.Player.WorldData.CurrentGameMode == EnumGameMode.Creative ? InventoryType.Creative : InventoryType.Survival;
         }
 
-        string inventoryFieldName = type switch
+        return type switch
+        {
+            InventoryType.Survival => "ComposeSurvivalInvDialog",
+            InventoryType.Creative => "ComposeCreativeInvDialog",
+            _ => "ComposeSurvivalInvDialog"
+        };
+    }
+
+    private string GetInvDialogName(InventoryType type)
+    {
+        if (type == InventoryType.Main)
+        {
+            type = capi.World.Player.WorldData.CurrentGameMode == EnumGameMode.Creative ? InventoryType.Creative : InventoryType.Survival;
+        }
+
+        return type switch
         {
             InventoryType.Survival => "survivalInvDialog",
             InventoryType.Creative => "creativeInvDialog",
             _ => "survivalInvDialog"
         };
-
-        FieldInfo? survivalInvDialogInfo =
-            typeof(GuiDialogInventory).GetField(inventoryFieldName,
-                BindingFlags.NonPublic | BindingFlags.Instance);
-        if (survivalInvDialogInfo != null)
-            inventory.Composers["maininventory"] =
-                (GuiComposer)survivalInvDialogInfo.GetValue(inventory)!;
     }
 }
