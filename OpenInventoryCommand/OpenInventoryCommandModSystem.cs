@@ -40,21 +40,21 @@ public class OpenInventoryCommandModSystem : ModSystem
 
             .BeginSubCommand("main")
                 .WithAlias("m")
-                .WithDescription("Open the main inventory depending on the current gamemode")
+                .WithDescription("Open the main inventory depending on the current gamemode, or close it if already open")
                 .HandleWith(OnInventoryMain)
             .EndSubCommand()
 
             .BeginSubCommand("survival")
                 .WithAlias("s")
                 .WithAlias("1")
-                .WithDescription("Open the survival inventory")
+                .WithDescription("Open the survival inventory, or close it if already open")
                 .HandleWith(OnInventorySurvival)
             .EndSubCommand()
 
             .BeginSubCommand("creative")
                 .WithAlias("c")
                 .WithAlias("2")
-                .WithDescription("Open the creative inventory")
+                .WithDescription("Open the creative inventory, or close it if already open")
                 .HandleWith(OnInventoryCreative)
             .EndSubCommand()
             ;
