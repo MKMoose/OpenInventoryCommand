@@ -134,7 +134,6 @@ public class OpenInventoryCommandModSystem : ModSystem
             return false;
 
         GuiComposer prevComposer = inventory.Composers["maininventory"];
-        inventory.Composers["maininventory"] = newComposer;
         return newComposer == prevComposer;
     }
 
