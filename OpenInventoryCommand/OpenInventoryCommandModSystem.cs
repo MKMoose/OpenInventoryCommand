@@ -23,7 +23,9 @@ enum InventoryType
 {
     Main,
     Survival,
-    Creative
+    Creative,
+    Switch,
+    Close
 }
 
 public class OpenInventoryCommandModSystem : ModSystem
@@ -41,46 +43,49 @@ public class OpenInventoryCommandModSystem : ModSystem
             .BeginSubCommand("main")
                 .WithAlias("m")
                 .WithDescription("Open the main inventory depending on the current gamemode, or close it if already open")
-                .HandleWith(OnInventoryMain)
+                .HandleWith(args => OnInventory(args, InventoryType.Main))
             .EndSubCommand()
 
             .BeginSubCommand("survival")
                 .WithAlias("s")
                 .WithAlias("1")
                 .WithDescription("Open the survival inventory, or close it if already open")
-                .HandleWith(OnInventorySurvival)
+                .HandleWith(args => OnInventory(args, InventoryType.Survival))
             .EndSubCommand()
 
             .BeginSubCommand("creative")
                 .WithAlias("c")
                 .WithAlias("2")
                 .WithDescription("Open the creative inventory, or close it if already open")
-                .HandleWith(OnInventoryCreative)
+                .HandleWith(args => OnInventory(args, InventoryType.Creative))
+            .EndSubCommand()
+
+            .BeginSubCommand("switch")
+                .WithDescription("Switch to the other inventory, or open the main inventory if none are open")
+                .HandleWith(args => OnInventory(args, InventoryType.Switch))
+            .EndSubCommand()
+
+            .BeginSubCommand("close")
+                .WithDescription("Close any open inventory")
+                .HandleWith(args => OnInventory(args, InventoryType.Close))
             .EndSubCommand()
             ;
     }
 
-    private TextCommandResult OnInventoryMain(TextCommandCallingArgs args)
+    private TextCommandResult OnInventory(TextCommandCallingArgs args, InventoryType newType)
     {
-        return OnInventoryInternal(args, InventoryType.Main);
-    }
-
-    private TextCommandResult OnInventorySurvival(TextCommandCallingArgs args)
-    {
-        return OnInventoryInternal(args, InventoryType.Survival);
-    }
-
-    private TextCommandResult OnInventoryCreative(TextCommandCallingArgs args)
-    {
-        return OnInventoryInternal(args, InventoryType.Creative);
-    }
-
-    private TextCommandResult OnInventoryInternal(TextCommandCallingArgs args, InventoryType newType)
-    {
-        if (newType == InventoryType.Creative && capi.World.Player.WorldData.CurrentGameMode != EnumGameMode.Creative)
-            return TextCommandResult.Error("You can only use this command in creative mode.");
+        switch (newType)
+        {
+            case InventoryType.Creative:
+                if (capi.World.Player.WorldData.CurrentGameMode != EnumGameMode.Creative)
+                    return TextCommandResult.Error("You can only use this command in creative mode.");
+                break;
+        }
 
         GuiDialog inventory = capi.Gui.LoadedGuis.First(gui => gui is GuiDialogInventory);
+
+        newType = CollapseInventoryType(inventory, newType);
+
         if (inventory.IsOpened())
         {
             inventory.TryClose();
@@ -93,7 +98,7 @@ public class OpenInventoryCommandModSystem : ModSystem
             }
         }
 
-        string composeMethodName = GetComposeMethodName(newType);
+        string composeMethodName = GetComposeMethodName(inventory, newType);
 
         inventory.TryOpen();
         
@@ -110,7 +115,7 @@ public class OpenInventoryCommandModSystem : ModSystem
 
     private void SetMainInventory(GuiDialog inventory, InventoryType newType)
     {
-        string invDialogName = GetInvDialogName(newType);
+        string invDialogName = GetInvDialogName(inventory, newType);
 
         if (typeof(GuiDialogInventory)
             .GetField(invDialogName,
@@ -124,7 +129,13 @@ public class OpenInventoryCommandModSystem : ModSystem
 
     private bool MatchesCurrentInventoryType(GuiDialog inventory, InventoryType newType)
     {
-        string invDialogName = GetInvDialogName(newType);
+        switch (newType)
+        {
+            case InventoryType.Switch: return false; // would always return false either way
+            case InventoryType.Close: return true; // causes an early return in SetMainInventory
+        }
+
+        string invDialogName = GetInvDialogName(inventory, newType);
 
         if (typeof(GuiDialogInventory)
             .GetField(invDialogName,
@@ -137,13 +148,8 @@ public class OpenInventoryCommandModSystem : ModSystem
         return newComposer == prevComposer;
     }
 
-    private string GetComposeMethodName(InventoryType type)
+    private string GetComposeMethodName(GuiDialog inventory, InventoryType type)
     {
-        if (type == InventoryType.Main)
-        {
-            type = capi.World.Player.WorldData.CurrentGameMode == EnumGameMode.Creative ? InventoryType.Creative : InventoryType.Survival;
-        }
-
         return type switch
         {
             InventoryType.Survival => "ComposeSurvivalInvDialog",
@@ -152,18 +158,26 @@ public class OpenInventoryCommandModSystem : ModSystem
         };
     }
 
-    private string GetInvDialogName(InventoryType type)
+    private string GetInvDialogName(GuiDialog inventory, InventoryType type)
     {
-        if (type == InventoryType.Main)
-        {
-            type = capi.World.Player.WorldData.CurrentGameMode == EnumGameMode.Creative ? InventoryType.Creative : InventoryType.Survival;
-        }
-
         return type switch
         {
             InventoryType.Survival => "survivalInvDialog",
             InventoryType.Creative => "creativeInvDialog",
             _ => "survivalInvDialog"
+        };
+    }
+
+    private InventoryType CollapseInventoryType(GuiDialog inventory, InventoryType type)
+    {
+        return type switch
+        {
+            InventoryType.Main => CollapseInventoryType(inventory, InventoryType.Creative),
+            InventoryType.Creative => capi.World.Player.WorldData.CurrentGameMode == EnumGameMode.Creative ? InventoryType.Creative : InventoryType.Survival,
+            InventoryType.Switch => inventory.IsOpened()
+                ? (MatchesCurrentInventoryType(inventory, InventoryType.Creative) ? InventoryType.Survival : CollapseInventoryType(inventory, InventoryType.Creative))
+                : CollapseInventoryType(inventory, InventoryType.Main),
+            _ => type
         };
     }
 }
